@@ -771,3 +771,73 @@ INFO:TrainMonitor:ep: 757,	T: 31,157,	G: 170,	avg_r: 1,	avg_G: 205,	t: 170,	dt: 
 INFO:TrainMonitor:ep: 758,	T: 31,292,	G: 134,	avg_r: 1,	avg_G: 198,	t: 134,	dt: 25.405ms,	v: 40.9,	Rn: 43.7,	loss: 2.48,	training_step: 3.79e+04
 INFO:TrainMonitor:ep: 759,	T: 31,449,	G: 156,	avg_r: 1,	avg_G: 194,	t: 156,	dt: 23.114ms,	v: 43.5,	Rn: 46.4,	loss: 2.48,	training_step: 3.8e+04
 INFO:TrainMonitor:ep: 760,	T: 31,497,	G: 47,	avg_r: 1,	avg_G: 179,	t: 47,	dt: 28.786ms,	v: 36.3,	Rn: 34.3,	loss: 2.48,	training_step: 3.8e+04
+INFO:TrainMonitor:ep: 761,	T: 31,832,	G: 334,	avg_r: 1,	avg_G: 195,	t: 334,	dt: 132.537ms,	v: 44.4,	Rn: 48.5,	loss: 2.51,	training_step: 3.8e+04,	test_G: 178
+INFO:TrainMonitor:ep: 762,	T: 31,996,	G: 163,	avg_r: 1,	avg_G: 192,	t: 163,	dt: 22.669ms,	v: 44.6,	Rn: 47.6,	loss: 2.5,	training_step: 3.81e+04
+INFO:TrainMonitor:ep: 763,	T: 32,165,	G: 168,	avg_r: 1,	avg_G: 189,	t: 168,	dt: 23.585ms,	v: 43.8,	Rn: 46.9,	loss: 2.48,	training_step: 3.82e+04
+INFO:TrainMonitor:ep: 764,	T: 32,356,	G: 190,	avg_r: 1,	avg_G: 189,	t: 190,	dt: 23.997ms,	v: 43.6,	Rn: 47,	loss: 2.48,	training_step: 3.82e+04
+INFO:TrainMonitor:ep: 765,	T: 32,516,	G: 159,	avg_r: 1,	avg_G: 186,	t: 159,	dt: 22.021ms,	v: 43,	Rn: 46.1,	loss: 2.47,	training_step: 3.82e+04
+INFO:TrainMonitor:ep: 766,	T: 32,782,	G: 265,	avg_r: 1,	avg_G: 194,	t: 265,	dt: 22.254ms,	v: 45.2,	Rn: 48.9,	loss: 2.47,	training_step: 3.83e+04
+INFO:TrainMonitor:ep: 767,	T: 32,932,	G: 149,	avg_r: 1,	avg_G: 190,	t: 149,	dt: 24.694ms,	v: 40.4,	Rn: 43.5,	loss: 2.47,	training_step: 3.84e+04
+INFO:TrainMonitor:ep: 768,	T: 33,111,	G: 178,	avg_r: 1,	avg_G: 188,	t: 178,	dt: 23.731ms,	v: 44,	Rn: 47.2,	loss: 2.47,	training_step: 3.84e+04
+INFO:TrainMonitor:ep: 769,	T: 33,294,	G: 182,	avg_r: 1,	avg_G: 188,	t: 182,	dt: 21.766ms,	v: 45.2,	Rn: 48.3,	loss: 2.47,	training_step: 3.84e+04
+INFO:TrainMonitor:ep: 770,	T: 33,494,	G: 199,	avg_r: 1,	avg_G: 189,	t: 199,	dt: 23.209ms,	v: 44.3,	Rn: 47.7,	loss: 2.51,	training_step: 3.85e+04
+INFO:TrainMonitor:ep: 771,	T: 33,689,	G: 194,	avg_r: 1,	avg_G: 189,	t: 194,	dt: 191.781ms,	v: 43.1,	Rn: 46.5,	loss: 2.46,	training_step: 3.86e+04,	test_G: 156
+INFO:TrainMonitor:ep: 772,	T: 33,887,	G: 197,	avg_r: 1,	avg_G: 190,	t: 197,	dt: 22.578ms,	v: 44.8,	Rn: 48.2,	loss: 2.45,	training_step: 3.86e+04
+INFO:TrainMonitor:ep: 773,	T: 33,953,	G: 65,	avg_r: 1,	avg_G: 178,	t: 65,	dt: 26.683ms,	v: 23.1,	Rn: 24.5,	loss: 2.46,	training_step: 3.86e+04
+INFO:TrainMonitor:ep: 774,	T: 34,118,	G: 164,	avg_r: 1,	avg_G: 176,	t: 164,	dt: 23.797ms,	v: 44.3,	Rn: 47.3,	loss: 2.47,	training_step: 3.87e+04
+INFO:TrainMonitor:ep: 775,	T: 34,258,	G: 139,	avg_r: 1,	avg_G: 173,	t: 139,	dt: 23.371ms,	v: 44.1,	Rn: 46.6,	loss: 2.5,	training_step: 3.88e+04
+INFO:TrainMonitor:ep: 776,	T: 34,346,	G: 87,	avg_r: 1,	avg_G: 164,	t: 87,	dt: 23.932ms,	v: 42.4,	Rn: 43.6,	loss: 2.49,	training_step: 3.88e+04
+INFO:TrainMonitor:ep: 777,	T: 34,582,	G: 235,	avg_r: 1,	avg_G: 171,	t: 235,	dt: 21.713ms,	v: 45.1,	Rn: 48.7,	loss: 2.48,	training_step: 3.88e+04
+INFO:TrainMonitor:ep: 778,	T: 34,741,	G: 158,	avg_r: 1,	avg_G: 170,	t: 158,	dt: 25.374ms,	v: 43.6,	Rn: 46.8,	loss: 2.49,	training_step: 3.89e+04
+INFO:TrainMonitor:ep: 779,	T: 34,869,	G: 127,	avg_r: 1,	avg_G: 166,	t: 127,	dt: 23.653ms,	v: 42.2,	Rn: 44.7,	loss: 2.49,	training_step: 3.9e+04
+INFO:TrainMonitor:ep: 780,	T: 35,064,	G: 194,	avg_r: 1,	avg_G: 168,	t: 194,	dt: 23.456ms,	v: 44.5,	Rn: 47.9,	loss: 2.48,	training_step: 3.9e+04
+INFO:TrainMonitor:ep: 781,	T: 35,330,	G: 265,	avg_r: 1,	avg_G: 178,	t: 265,	dt: 181.941ms,	v: 44.9,	Rn: 48.7,	loss: 2.49,	training_step: 3.9e+04,	test_G: 195
+INFO:TrainMonitor:ep: 782,	T: 35,460,	G: 129,	avg_r: 1,	avg_G: 173,	t: 129,	dt: 24.103ms,	v: 44.4,	Rn: 46.7,	loss: 2.46,	training_step: 3.91e+04
+INFO:TrainMonitor:ep: 783,	T: 35,747,	G: 286,	avg_r: 1,	avg_G: 184,	t: 286,	dt: 22.027ms,	v: 45.9,	Rn: 49.7,	loss: 2.48,	training_step: 3.92e+04
+INFO:TrainMonitor:ep: 784,	T: 35,932,	G: 184,	avg_r: 1,	avg_G: 184,	t: 184,	dt: 23.940ms,	v: 45.1,	Rn: 48.2,	loss: 2.49,	training_step: 3.92e+04
+INFO:TrainMonitor:ep: 785,	T: 36,123,	G: 190,	avg_r: 1,	avg_G: 185,	t: 190,	dt: 22.049ms,	v: 44.7,	Rn: 48,	loss: 2.49,	training_step: 3.92e+04
+INFO:TrainMonitor:ep: 786,	T: 36,342,	G: 218,	avg_r: 1,	avg_G: 188,	t: 218,	dt: 22.568ms,	v: 44.5,	Rn: 48,	loss: 2.49,	training_step: 3.93e+04
+INFO:TrainMonitor:ep: 787,	T: 36,514,	G: 171,	avg_r: 1,	avg_G: 187,	t: 171,	dt: 24.108ms,	v: 43.5,	Rn: 46.8,	loss: 2.5,	training_step: 3.94e+04
+INFO:TrainMonitor:ep: 788,	T: 36,679,	G: 164,	avg_r: 1,	avg_G: 184,	t: 164,	dt: 23.899ms,	v: 45,	Rn: 47.9,	loss: 2.51,	training_step: 3.94e+04
+INFO:TrainMonitor:ep: 789,	T: 36,865,	G: 185,	avg_r: 1,	avg_G: 184,	t: 185,	dt: 22.851ms,	v: 45.6,	Rn: 48.7,	loss: 2.48,	training_step: 3.94e+04
+INFO:TrainMonitor:ep: 790,	T: 37,018,	G: 152,	avg_r: 1,	avg_G: 181,	t: 152,	dt: 23.708ms,	v: 44.9,	Rn: 47.6,	loss: 2.48,	training_step: 3.95e+04
+INFO:TrainMonitor:ep: 791,	T: 37,147,	G: 128,	avg_r: 1,	avg_G: 176,	t: 128,	dt: 279.405ms,	v: 45.1,	Rn: 47.4,	loss: 2.44,	training_step: 3.96e+04,	test_G: 155
+INFO:TrainMonitor:ep: 792,	T: 37,315,	G: 167,	avg_r: 1,	avg_G: 175,	t: 167,	dt: 23.324ms,	v: 45.4,	Rn: 48.3,	loss: 2.51,	training_step: 3.96e+04
+INFO:TrainMonitor:ep: 793,	T: 37,328,	G: 12,	avg_r: 1,	avg_G: 159,	t: 12,	dt: 44.381ms,	v: 37.8,	Rn: 11.8,	loss: 2.49,	training_step: 3.96e+04
+INFO:TrainMonitor:ep: 794,	T: 37,481,	G: 152,	avg_r: 1,	avg_G: 158,	t: 152,	dt: 22.967ms,	v: 45.4,	Rn: 48.2,	loss: 2.48,	training_step: 3.97e+04
+INFO:TrainMonitor:ep: 795,	T: 37,664,	G: 182,	avg_r: 1,	avg_G: 160,	t: 182,	dt: 22.731ms,	v: 45.8,	Rn: 48.8,	loss: 2.5,	training_step: 3.98e+04
+INFO:TrainMonitor:ep: 796,	T: 37,859,	G: 194,	avg_r: 1,	avg_G: 164,	t: 194,	dt: 23.532ms,	v: 45.2,	Rn: 48.5,	loss: 2.5,	training_step: 3.98e+04
+INFO:TrainMonitor:ep: 797,	T: 38,000,	G: 140,	avg_r: 1,	avg_G: 161,	t: 140,	dt: 23.739ms,	v: 45.1,	Rn: 47.5,	loss: 2.51,	training_step: 3.98e+04
+INFO:TrainMonitor:ep: 798,	T: 38,125,	G: 124,	avg_r: 1,	avg_G: 158,	t: 124,	dt: 23.887ms,	v: 44.8,	Rn: 47.1,	loss: 2.52,	training_step: 3.99e+04
+INFO:TrainMonitor:ep: 799,	T: 38,302,	G: 176,	avg_r: 1,	avg_G: 159,	t: 176,	dt: 23.721ms,	v: 46,	Rn: 49,	loss: 2.51,	training_step: 4e+04
+INFO:TrainMonitor:ep: 800,	T: 38,471,	G: 168,	avg_r: 1,	avg_G: 160,	t: 168,	dt: 24.025ms,	v: 41.1,	Rn: 44.5,	loss: 2.48,	training_step: 4e+04
+INFO:TrainMonitor:ep: 801,	T: 38,666,	G: 194,	avg_r: 1,	avg_G: 164,	t: 194,	dt: 147.624ms,	v: 45.4,	Rn: 48.6,	loss: 2.48,	training_step: 4e+04,	test_G: 111
+INFO:TrainMonitor:ep: 802,	T: 38,853,	G: 186,	avg_r: 1,	avg_G: 166,	t: 186,	dt: 23.713ms,	v: 46,	Rn: 49.1,	loss: 2.48,	training_step: 4.01e+04
+INFO:TrainMonitor:ep: 803,	T: 39,035,	G: 181,	avg_r: 1,	avg_G: 167,	t: 181,	dt: 23.154ms,	v: 45.1,	Rn: 48.2,	loss: 2.49,	training_step: 4.02e+04
+INFO:TrainMonitor:ep: 804,	T: 39,282,	G: 246,	avg_r: 1,	avg_G: 175,	t: 246,	dt: 23.017ms,	v: 45.6,	Rn: 49.3,	loss: 2.52,	training_step: 4.02e+04
+INFO:TrainMonitor:ep: 805,	T: 39,465,	G: 182,	avg_r: 1,	avg_G: 176,	t: 182,	dt: 22.920ms,	v: 45.8,	Rn: 48.9,	loss: 2.5,	training_step: 4.02e+04
+INFO:TrainMonitor:ep: 806,	T: 39,612,	G: 146,	avg_r: 1,	avg_G: 173,	t: 146,	dt: 23.471ms,	v: 45.4,	Rn: 47.9,	loss: 2.51,	training_step: 4.03e+04
+INFO:TrainMonitor:ep: 807,	T: 39,793,	G: 180,	avg_r: 1,	avg_G: 174,	t: 180,	dt: 23.176ms,	v: 42.5,	Rn: 45.9,	loss: 2.5,	training_step: 4.04e+04
+INFO:TrainMonitor:ep: 808,	T: 39,994,	G: 200,	avg_r: 1,	avg_G: 176,	t: 200,	dt: 23.501ms,	v: 44.4,	Rn: 47.7,	loss: 2.5,	training_step: 4.04e+04
+INFO:TrainMonitor:ep: 809,	T: 40,042,	G: 47,	avg_r: 1,	avg_G: 163,	t: 47,	dt: 30.029ms,	v: 34,	Rn: 32.1,	loss: 2.5,	training_step: 4.04e+04
+INFO:TrainMonitor:ep: 810,	T: 40,151,	G: 108,	avg_r: 1,	avg_G: 158,	t: 108,	dt: 24.975ms,	v: 39.6,	Rn: 41.8,	loss: 2.52,	training_step: 4.05e+04
+INFO:TrainMonitor:ep: 811,	T: 40,357,	G: 205,	avg_r: 1,	avg_G: 163,	t: 205,	dt: 113.882ms,	v: 46.4,	Rn: 49.7,	loss: 2.52,	training_step: 4.06e+04,	test_G: 89.5
+INFO:TrainMonitor:ep: 812,	T: 40,508,	G: 150,	avg_r: 1,	avg_G: 161,	t: 150,	dt: 23.696ms,	v: 44.3,	Rn: 47,	loss: 2.49,	training_step: 4.06e+04
+INFO:TrainMonitor:ep: 813,	T: 40,701,	G: 192,	avg_r: 1,	avg_G: 164,	t: 192,	dt: 22.927ms,	v: 45.8,	Rn: 48.9,	loss: 2.5,	training_step: 4.06e+04
+INFO:TrainMonitor:ep: 814,	T: 40,892,	G: 190,	avg_r: 1,	avg_G: 167,	t: 190,	dt: 23.267ms,	v: 45,	Rn: 48.3,	loss: 2.51,	training_step: 4.07e+04
+INFO:TrainMonitor:ep: 815,	T: 41,072,	G: 179,	avg_r: 1,	avg_G: 168,	t: 179,	dt: 23.893ms,	v: 46.5,	Rn: 49.5,	loss: 2.51,	training_step: 4.08e+04
+INFO:TrainMonitor:ep: 816,	T: 41,219,	G: 146,	avg_r: 1,	avg_G: 166,	t: 146,	dt: 24.722ms,	v: 44.3,	Rn: 47.1,	loss: 2.49,	training_step: 4.08e+04
+INFO:TrainMonitor:ep: 817,	T: 41,394,	G: 174,	avg_r: 1,	avg_G: 167,	t: 174,	dt: 23.631ms,	v: 45.6,	Rn: 48.5,	loss: 2.48,	training_step: 4.08e+04
+INFO:TrainMonitor:ep: 818,	T: 41,549,	G: 154,	avg_r: 1,	avg_G: 165,	t: 154,	dt: 23.878ms,	v: 45.1,	Rn: 47.8,	loss: 2.49,	training_step: 4.09e+04
+INFO:TrainMonitor:ep: 819,	T: 41,719,	G: 169,	avg_r: 1,	avg_G: 166,	t: 169,	dt: 23.799ms,	v: 44.1,	Rn: 47.2,	loss: 2.5,	training_step: 4.1e+04
+INFO:TrainMonitor:ep: 820,	T: 41,894,	G: 174,	avg_r: 1,	avg_G: 167,	t: 174,	dt: 23.380ms,	v: 45.7,	Rn: 48.6,	loss: 2.51,	training_step: 4.1e+04
+INFO:TrainMonitor:ep: 821,	T: 42,027,	G: 132,	avg_r: 1,	avg_G: 163,	t: 132,	dt: 190.822ms,	v: 43.6,	Rn: 46.1,	loss: 2.53,	training_step: 4.1e+04,	test_G: 96.1
+INFO:TrainMonitor:ep: 822,	T: 42,193,	G: 165,	avg_r: 1,	avg_G: 163,	t: 165,	dt: 25.392ms,	v: 45.2,	Rn: 48.2,	loss: 2.49,	training_step: 4.11e+04
+INFO:TrainMonitor:ep: 823,	T: 42,396,	G: 202,	avg_r: 1,	avg_G: 167,	t: 202,	dt: 22.885ms,	v: 45.7,	Rn: 49,	loss: 2.49,	training_step: 4.12e+04
+INFO:TrainMonitor:ep: 824,	T: 42,514,	G: 117,	avg_r: 1,	avg_G: 162,	t: 117,	dt: 23.526ms,	v: 44.5,	Rn: 46.4,	loss: 2.52,	training_step: 4.12e+04
+INFO:TrainMonitor:ep: 825,	T: 42,661,	G: 146,	avg_r: 1,	avg_G: 161,	t: 146,	dt: 23.483ms,	v: 45.7,	Rn: 48.3,	loss: 2.5,	training_step: 4.12e+04
+INFO:TrainMonitor:ep: 826,	T: 42,872,	G: 210,	avg_r: 1,	avg_G: 166,	t: 210,	dt: 22.787ms,	v: 46.3,	Rn: 49.5,	loss: 2.48,	training_step: 4.13e+04
+INFO:TrainMonitor:ep: 827,	T: 43,017,	G: 144,	avg_r: 1,	avg_G: 163,	t: 144,	dt: 23.972ms,	v: 45.6,	Rn: 48.1,	loss: 2.53,	training_step: 4.14e+04
+INFO:TrainMonitor:ep: 828,	T: 43,068,	G: 50,	avg_r: 1,	avg_G: 152,	t: 50,	dt: 28.733ms,	v: 36.6,	Rn: 34.9,	loss: 2.52,	training_step: 4.14e+04
+INFO:TrainMonitor:ep: 829,	T: 43,251,	G: 182,	avg_r: 1,	avg_G: 155,	t: 182,	dt: 24.549ms,	v: 45.8,	Rn: 48.8,	loss: 2.49,	training_step: 4.14e+04
+INFO:TrainMonitor:ep: 830,	T: 43,421,	G: 169,	avg_r: 1,	avg_G: 156,	t: 169,	dt: 23.312ms,	v: 45.5,	Rn: 48.4,	loss: 2.49,	training_step: 4.15e+04

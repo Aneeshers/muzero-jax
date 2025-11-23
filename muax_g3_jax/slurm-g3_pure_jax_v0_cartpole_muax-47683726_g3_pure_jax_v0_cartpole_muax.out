@@ -132,3 +132,13 @@ Start training (pure CartPole, JIT+scan episodes)...
 [Episode 127] train_loss = 2.2833, training_step = 6400, reward_sum = 277.00
 [Episode 128] train_loss = 1.9306, training_step = 6450, reward_sum = 233.00
 [Episode 129] train_loss = 1.9847, training_step = 6500, reward_sum = 136.00
+[Episode 130] train_loss = 2.1363, training_step = 6550, test_avg_reward = 278.10, best_test_reward = 278.10
+[Episode 131] train_loss = 2.1745, training_step = 6600, reward_sum = 170.00
+[Episode 132] train_loss = 1.9178, training_step = 6650, reward_sum = 500.00
+[Episode 133] train_loss = 2.8804, training_step = 6700, reward_sum = 500.00
+[Episode 134] train_loss = 2.7079, training_step = 6750, reward_sum = 94.00
+[Episode 135] train_loss = 2.1861, training_step = 6800, reward_sum = 500.00
+[Episode 136] train_loss = 2.3571, training_step = 6850, reward_sum = 378.00
+[Episode 137] train_loss = 2.2622, training_step = 6900, reward_sum = 143.00
+[Episode 138] train_loss = 2.5067, training_step = 6950, reward_sum = 287.00
+[Episode 139] train_loss = 1.8207, training_step = 7000, reward_sum = 500.00

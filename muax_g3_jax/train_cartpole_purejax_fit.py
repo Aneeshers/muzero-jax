@@ -5,7 +5,6 @@ import jax
 from jax import numpy as jnp
 from tqdm import tqdm
 from cartpole_jax_env import CartPole
-from episode_tracer import PNStep
 from replay_buffer import TrajectoryReplayBuffer, Trajectory
 from model import MuZero, optimizer as make_optimizer
 import wandb
@@ -16,6 +15,12 @@ from nn import (
     Representation,
     Prediction,
     Dynamic,
+)
+from jax_tracer import (
+    jax_pnstep_init,
+    jax_pnstep_push,
+    jax_pnstep_can_pop,
+    jax_pnstep_pop,
 )
 # from test import test  # Not needed for pure JAX eval; we use CartPole directly.
 
@@ -91,6 +96,8 @@ def fit_pure_cartpole(
     discount = model._discount
     num_actions = cartpole.num_actions
     obs_dim = cartpole.obs_shape  # (4,)
+    max_steps = cartpole.default_params.max_steps_in_episode
+
 
     # ---------------- Params / opt_state ----------------
     key = jax.random.PRNGKey(random_seed)
@@ -102,7 +109,6 @@ def fit_pure_cartpole(
     opt_state = model.optimizer_state
 
     # ---------------- Tracer & Buffer ----------------
-    tracer = PNStep(n=k_steps, gamma=discount, alpha=0.5)
     buffer = TrajectoryReplayBuffer(buffer_capacity)
 
     training_step = 0
@@ -120,7 +126,16 @@ def fit_pure_cartpole(
     while len(buffer) < buffer_warm_up:
         key, reset_key = jax.random.split(key)
         obs, env_state = cartpole.reset(reset_key, cartpole.default_params)
-        tracer.reset()
+        
+        jax_tracer = jax_pnstep_init(
+            n=k_steps,
+            gamma=discount,
+            alpha=0.5,
+            obs_dim=obs_dim[0],
+            num_actions=num_actions,
+            capacity=max_steps,
+        )
+        
         trajectory = Trajectory()
         temperature = temperature_fn(max_training_steps, training_step)
 
@@ -143,9 +158,17 @@ def fit_pure_cartpole(
                 cartpole.default_params,
             )
 
-            tracer.add(obs, int(a), float(reward), bool(done), v=v, pi=pi)
-            while tracer:
-                trans = tracer.pop()
+            jax_tracer = jax_pnstep_push(
+                jax_tracer,
+                obs,
+                int(a),
+                float(reward),
+                bool(done),
+                v,
+                pi,
+            )
+            while jax_pnstep_can_pop(jax_tracer):
+                jax_tracer, trans = jax_pnstep_pop(jax_tracer)
                 trajectory.add(trans)
 
             obs = obs_next
@@ -164,7 +187,16 @@ def fit_pure_cartpole(
     for ep in tqdm(range(max_episodes), desc="Training"):
         key, reset_key = jax.random.split(key)
         obs, env_state = cartpole.reset(reset_key, cartpole.default_params)
-        tracer.reset()
+        
+        jax_tracer = jax_pnstep_init(
+            n=k_steps,
+            gamma=discount,
+            alpha=0.5,
+            obs_dim=obs_dim[0],
+            num_actions=num_actions,
+            capacity=max_steps,
+        )
+        
         trajectory = Trajectory()
         temperature = temperature_fn(max_training_steps, training_step)
 
@@ -186,9 +218,17 @@ def fit_pure_cartpole(
                 cartpole.default_params,
             )
             reward_sum += float(reward)
-            tracer.add(obs, int(a), float(reward), bool(done), v=v, pi=pi)
-            while tracer:
-                trans = tracer.pop()
+            jax_tracer = jax_pnstep_push(
+                jax_tracer,
+                obs,
+                int(a),
+                float(reward),
+                bool(done),
+                v,
+                pi,
+            )
+            while jax_pnstep_can_pop(jax_tracer):
+                jax_tracer, trans = jax_pnstep_pop(jax_tracer)
                 trajectory.add(trans)
 
             obs = obs_next

@@ -1,0 +1,9 @@
+wandb: Currently logged in as: aneeshmuppidi19. Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.23.0 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.17.0
+wandb: Run data is saved locally in /n/home04/amuppidi/muax_control/muax_g3_jax/wandb/run-20251123_111852-x2i9o456
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run num_simulations_40_episodes_2000
+wandb: ⭐️ View project at https://wandb.ai/aneeshmuppidi19/muax_jax_cartpole_sims
+wandb: 🚀 View run at https://wandb.ai/aneeshmuppidi19/muax_jax_cartpole_sims/runs/x2i9o456

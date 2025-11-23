@@ -14,9 +14,9 @@ def main():
     parser.add_argument("--k_steps", type=int, default=10)
     parser.add_argument("--wandb_project", type=str, default="muax_jax_cartpole")
     parser.add_argument("--wandb_mode", type=str, default="online")
-    parser.add_argument("max_episodes", type=int, default=2000)
+    parser.add_argument("--max_episodes", type=int, default=2000)
     args = parser.parse_args()
-    wandb.init(project=args.wandb_project, name=f"num_simulations_{num_simulations}_episodes_{max_episodes}", mode=args.wandb_mode)
+    wandb.init(project=args.wandb_project, name=f"num_simulations_{args.num_simulations}_episodes_{args.max_episodes}", mode=args.wandb_mode)
     support_size = args.support_size
     embedding_size = args.embedding_size
     discount = args.discount

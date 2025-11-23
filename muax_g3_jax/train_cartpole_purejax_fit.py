@@ -144,7 +144,7 @@ def fit_pure_cartpole(
     num_update_per_episode: int = 50,
     random_seed: int = 0,
     test_interval: int = 100,
-    num_test_episodes: int = 100,
+    num_test_episodes: int = 30,
 ):
     # ---------------- Env ----------------
     cartpole = CartPole()

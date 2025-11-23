@@ -1,0 +1,12 @@
+wandb: Currently logged in as: aneeshmuppidi19. Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.23.0 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.17.0
+wandb: Run data is saved locally in /n/home04/amuppidi/muax_control/muax_g3_jax/wandb/run-20251123_111836-qylnm3ft
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run num_simulations_10_episodes_2000
+wandb: ⭐️ View project at https://wandb.ai/aneeshmuppidi19/muax_jax_cartpole_sims
+wandb: 🚀 View run at https://wandb.ai/aneeshmuppidi19/muax_jax_cartpole_sims/runs/qylnm3ft
+Training:   0%|          | 0/2000 [00:00<?, ?it/s]2025-11-23 11:19:11.635899: W external/xla/xla/service/gpu/autotuning/dot_search_space.cc:200] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs?Working around this by using the full hints set instead.
+2025-11-23 11:19:11.635933: W external/xla/xla/service/gpu/autotuning/dot_search_space.cc:200] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs?Working around this by using the full hints set instead.
+2025-11-23 11:19:11.635948: W external/xla/xla/service/gpu/autotuning/dot_search_space.cc:200] All configs were filtered out because none of them sufficiently match the hints. Maybe the hints set does not contain a good representative set of valid configs?Working around this by using the full hints set instead.

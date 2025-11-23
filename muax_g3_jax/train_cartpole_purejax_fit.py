@@ -16,15 +16,16 @@ from nn import (
 )
 from jax_tracer import (
     jax_pnstep_init,
-    jax_pnstep_push,
-    jax_pnstep_can_pop,
-    jax_pnstep_pop,
+    _pnstep_push_core,
+    _pnstep_can_pop_jax,
+    _pnstep_pop_core,
 )
 from jax_transition_replay_buffer import (
     jax_trans_replay_init,
-    jax_trans_replay_add_transition,
-    jax_trans_replay_sample_segments,
+    _add_transition_arrays,
+    _sample_segments_core,
 )
+
 
 def eval_pure_cartpole(
     model: MuZero,
@@ -34,12 +35,7 @@ def eval_pure_cartpole(
     num_simulations: int = 50,
     num_test_episodes: int = 10,
 ):
-    """Evaluate the model on the pure JAX CartPole env.
-
-    Returns:
-        avg_reward: float, average total reward over num_test_episodes.
-        key: updated PRNGKey.
-    """
+    """Evaluate the model on the pure JAX CartPole env (Python loop)."""
     total_rewards = jnp.zeros((num_test_episodes,), dtype=jnp.float32)
 
     for ep in tqdm(range(num_test_episodes), desc="Testing"):
@@ -86,7 +82,7 @@ def fit_pure_cartpole(
     buffer_capacity: int = 500,     # capacity = number of transitions
     buffer_warm_up: int = 1024,     # minimum transitions before updates
     num_trajectory: int = 32,       # used to set batch_size
-    sample_per_trajectory: int = 10,
+    sample_per_trajectory: int = 10,  # unused now but kept for interface
     num_update_per_episode: int = 50,
     random_seed: int = 0,
     test_interval: int = 10,
@@ -98,6 +94,7 @@ def fit_pure_cartpole(
     num_actions = cartpole.num_actions
     obs_dim = cartpole.obs_shape  # (4,)
     max_steps = cartpole.default_params.max_steps_in_episode
+    env_params = cartpole.default_params  # capture once
 
     # ---------------- Params / opt_state ----------------
     key = jax.random.PRNGKey(random_seed)
@@ -109,8 +106,6 @@ def fit_pure_cartpole(
     opt_state = model.optimizer_state
 
     # ---------------- JAX Transition Replay Buffer ----------------
-    # Buffer stores per-step transitions; segments of length k_steps are
-    # built at sample time.
     jax_rb = jax_trans_replay_init(
         capacity=buffer_capacity,
         obs_dim=obs_dim[0],
@@ -119,8 +114,6 @@ def fit_pure_cartpole(
     )
 
     training_step = 0
-
-    # Batch size for updates: roughly num_trajectory * sample_per_trajectory
     batch_size = num_trajectory * sample_per_trajectory
 
     def temperature_fn(max_training_steps, training_steps):
@@ -131,19 +124,17 @@ def fit_pure_cartpole(
         else:
             return 0.25
 
-    # ---------------- Buffer warmup ----------------
-        # ---------------- Buffer warmup ----------------
-    print("Buffer warm-up stage (pure CartPole)...")
-    warmup_ep = 0
-    # We warm up until we have at least `buffer_warm_up` transitions.
-    while int(jax_rb.size) < buffer_warm_up:
-        warmup_ep += 1
-        before_size = int(jax_rb.size)
-
+    # ----------------------------------------------------------------
+    # Jitted per-episode rollout (no updates)
+    # ----------------------------------------------------------------
+    def _collect_one_episode(params, rb_state, key, temperature):
+        """Roll out one episode, add transitions to rb_state, return (rb_state, key, reward_sum)."""
+        # Reset env
         key, reset_key = jax.random.split(key)
-        obs, env_state = cartpole.reset(reset_key, cartpole.default_params)
+        obs0, env_state0 = cartpole.reset(reset_key, env_params)
 
-        jax_tracer = jax_pnstep_init(
+        # Init tracer
+        tracer0 = jax_pnstep_init(
             n=k_steps,
             gamma=discount,
             alpha=0.5,
@@ -152,136 +143,216 @@ def fit_pure_cartpole(
             capacity=max_steps,
         )
 
-        temperature = temperature_fn(max_training_steps, training_step)
-
-        ep_steps = 0
-        for t in range(max_steps):
-            ep_steps += 1
-            key, act_key, env_key = jax.random.split(key, 3)
-
-            # act_from_params: pure-style
-            a, pi, v = model.act_from_params(
-                params,
-                act_key,
-                obs,
-                num_simulations=num_simulations,
-                temperature=temperature,
-            )
-
-            obs_next, env_state, reward, done, info = cartpole.step(
-                env_key,
-                env_state,
-                a,
-                cartpole.default_params,
-            )
-
-            # Push into JAX tracer and pop transitions into transition buffer
-            jax_tracer = jax_pnstep_push(
-                jax_tracer,
-                obs,
-                int(a),
-                float(reward),
-                bool(done),
-                v,
-                pi,
-            )
-            while jax_pnstep_can_pop(jax_tracer):
-                jax_tracer, trans = jax_pnstep_pop(jax_tracer)
-                jax_rb = jax_trans_replay_add_transition(jax_rb, trans)
-
-            obs = obs_next
-            if bool(done):
-                break
-
-        after_size = int(jax_rb.size)
-        added = after_size - before_size
-        print(
-            f"[Warmup ep {warmup_ep}] steps={ep_steps}, "
-            f"transitions added this ep={added}, total transitions={after_size} "
-            f"(target warmup={buffer_warm_up})"
+        # carry: (env_state, tracer_state, rb_state, key, reward_sum, done_flag)
+        carry0 = (
+            env_state0,
+            tracer0,
+            rb_state,
+            key,
+            jnp.array(0.0, dtype=jnp.float32),
+            jnp.array(False),
         )
 
-        # Safety: prevent infinite loop if buffer_warm_up > capacity
-        if buffer_warm_up > buffer_capacity:
-            print(
-                f"Warning: buffer_warm_up ({buffer_warm_up}) > buffer_capacity ({buffer_capacity}); "
-                "warmup will never terminate."
+        def step_fn(carry, _):
+            env_state, tracer_state, rb_state, key_step, reward_sum, done_flag = carry
+            key_step, act_key, env_key = jax.random.split(key_step, 3)
+
+            def do_step(args):
+                env_state, tracer_state, rb_state, key_step, reward_sum, done_flag = args
+                obs = cartpole.get_obs(env_state)  # [obs_dim]
+
+                a, pi, v = model.act_from_params(
+                    params,
+                    act_key,
+                    obs,
+                    num_simulations=num_simulations,
+                    temperature=temperature,
+                )
+
+                obs_next, env_state_next, reward, done, info = cartpole.step(
+                    env_key,
+                    env_state,
+                    a,
+                    env_params,
+                )
+
+                # Push into tracer
+                tracer_state2 = _pnstep_push_core(
+                    tracer_state,
+                    obs,
+                    a,
+                    reward,
+                    done,
+                    v,
+                    pi,
+                )
+
+                # Pop at most one transition here and add to rb_state
+                def add_and_pop(tp):
+                    t_state, rb = tp
+                    t_state2, trans = _pnstep_pop_core(t_state)
+                    rb2 = _add_transition_arrays(
+                        rb,
+                        trans.obs,
+                        trans.a,
+                        trans.r,
+                        trans.Rn,
+                        trans.pi,
+                        trans.w,
+                    )
+                    return (t_state2, rb2)
+
+                tracer_state3, rb_state2 = jax.lax.cond(
+                    _pnstep_can_pop_jax(tracer_state2),
+                    add_and_pop,
+                    lambda tp: tp,
+                    (tracer_state2, rb_state),
+                )
+
+                reward_sum2 = reward_sum + reward
+                done_flag2 = jnp.logical_or(done_flag, done)
+
+                new_carry = (
+                    env_state_next,
+                    tracer_state3,
+                    rb_state2,
+                    key_step,
+                    reward_sum2,
+                    done_flag2,
+                )
+                return new_carry, None
+
+            def skip_step(args):
+                # Episode already done; carry state forward
+                return args, None
+
+            carry_out, _ = jax.lax.cond(
+                done_flag,
+                skip_step,
+                do_step,
+                (env_state, tracer_state, rb_state, key_step, reward_sum, done_flag),
             )
-            break
+            return carry_out, None
 
+        # Scan over max_steps
+        carryT, _ = jax.lax.scan(step_fn, carry0, xs=None, length=max_steps)
+        env_stateT, tracerT, rb_stateT, keyT, reward_sum, done_flag_final = carryT
 
-    print("Start training (pure CartPole)...")
-    best_test_reward = float("-inf")
+        # Flush remaining transitions from tracer at episode end
+        def flush_cond(state_rb):
+            t_state, rb = state_rb
+            return _pnstep_can_pop_jax(t_state)
 
-    for ep in tqdm(range(max_episodes), desc="Training"):
-        key, reset_key = jax.random.split(key)
-        obs, env_state = cartpole.reset(reset_key, cartpole.default_params)
+        def flush_body(state_rb):
+            t_state, rb = state_rb
+            t_state2, trans = _pnstep_pop_core(t_state)
+            rb2 = _add_transition_arrays(
+                rb,
+                trans.obs,
+                trans.a,
+                trans.r,
+                trans.Rn,
+                trans.pi,
+                trans.w,
+            )
+            return (t_state2, rb2)
 
-        jax_tracer = jax_pnstep_init(
-            n=k_steps,
-            gamma=discount,
-            alpha=0.5,
-            obs_dim=obs_dim[0],
-            num_actions=num_actions,
-            capacity=max_steps,
+        tracer_final, rb_final = jax.lax.while_loop(
+            flush_cond,
+            flush_body,
+            (tracerT, rb_stateT),
         )
 
-        temperature = temperature_fn(max_training_steps, training_step)
+        return rb_final, keyT, reward_sum
 
-        # ----- Rollout one episode -----
-        reward_sum = 0.0
-        for t in tqdm(range(max_steps), desc="Rollout"):
-            key, act_key, env_key = jax.random.split(key, 3)
-            a, pi, v = model.act_from_params(
-                params,
-                act_key,
-                obs,
-                num_simulations=num_simulations,
-                temperature=temperature,
-            )
-            obs_next, env_state, reward, done, info = cartpole.step(
-                env_key,
-                env_state,
-                a,
-                cartpole.default_params,
-            )
-            reward_sum += float(reward)
+    collect_one_episode_jit = jax.jit(_collect_one_episode)
 
-            jax_tracer = jax_pnstep_push(
-                jax_tracer,
-                obs,
-                int(a),
-                float(reward),
-                bool(done),
-                v,
-                pi,
-            )
-            while jax_pnstep_can_pop(jax_tracer):
-                jax_tracer, trans = jax_pnstep_pop(jax_tracer)
-                jax_rb = jax_trans_replay_add_transition(jax_rb, trans)
+    # ----------------------------------------------------------------
+    # Jitted per-episode rollout + updates
+    # ----------------------------------------------------------------
+    def _train_one_episode(params, opt_state, rb_state, key, temperature):
+        """Roll out one episode, then run num_update_per_episode updates.
 
-            obs = obs_next
-            if bool(done):
-                break
+        Returns:
+          params, opt_state, rb_state, key, reward_sum, avg_train_loss
+        """
+        # First collect one episode (reuse the same core as warmup)
+        rb_after, key_after, reward_sum = _collect_one_episode(
+            params,
+            rb_state,
+            key,
+            temperature,
+        )
 
-        # ----- Updates -----
-        train_loss = 0.0
-        for _ in range(num_update_per_episode):
-            # Sample a batch of segments from transition-level JAX replay buffer
-            batch, key = jax_trans_replay_sample_segments(
-                jax_rb,
-                key,
-                batch_size=batch_size,
-            )
-            params, opt_state, loss = model.update_from_params(
+        # Then run SGD updates
+        def update_body(i, carry):
+            params, opt_state, rb_state, key_step, loss_accum = carry
+            batch, key_step = _sample_segments_core(rb_state, key_step, batch_size)
+            params2, opt_state2, loss = model.update_from_params(
                 params,
                 opt_state,
                 batch,
             )
-            train_loss += float(loss)
-            training_step += 1
+            loss_accum2 = loss_accum + loss
+            return (params2, opt_state2, rb_state, key_step, loss_accum2)
 
-        train_loss /= num_update_per_episode
+        init_carry = (params, opt_state, rb_after, key_after, jnp.array(0.0, dtype=jnp.float32))
+        paramsT, opt_stateT, rbT, keyT, loss_sum = jax.lax.fori_loop(
+            0,
+            num_update_per_episode,
+            update_body,
+            init_carry,
+        )
+        avg_loss = loss_sum / float(num_update_per_episode)
+        return paramsT, opt_stateT, rbT, keyT, reward_sum, avg_loss
+
+    train_one_episode_jit = jax.jit(_train_one_episode)
+
+    # ---------------- Buffer warmup (using jitted rollout) ----------------
+    print("Buffer warm-up stage (pure CartPole)...")
+    warmup_ep = 0
+    while int(jax_rb.size) < buffer_warm_up:
+        warmup_ep += 1
+        before_size = int(jax_rb.size)
+
+        temperature = temperature_fn(max_training_steps, training_step)
+        jax_rb, key, ep_reward = collect_one_episode_jit(
+            params,
+            jax_rb,
+            key,
+            temperature,
+        )
+
+        after_size = int(jax_rb.size)
+        added = after_size - before_size
+        print(
+            f"[Warmup ep {warmup_ep}] transitions added={added}, "
+            f"total transitions={after_size} (target warmup={buffer_warm_up})"
+        )
+
+        if buffer_warm_up > buffer_capacity:
+            print(
+                f"Warning: buffer_warm_up ({buffer_warm_up}) > buffer_capacity ({buffer_capacity}); "
+                "warmup will never fully satisfy the target."
+            )
+            break
+
+    # ---------------- Training ----------------
+    print("Start training (pure CartPole, JIT+scan episodes)...")
+    best_test_reward = float("-inf")
+
+    for ep in tqdm(range(max_episodes), desc="Training"):
+        temperature = temperature_fn(max_training_steps, training_step)
+
+        # Jitted per-episode rollout + updates
+        params, opt_state, jax_rb, key, reward_sum, train_loss = train_one_episode_jit(
+            params,
+            opt_state,
+            jax_rb,
+            key,
+            temperature,
+        )
+        training_step += num_update_per_episode
 
         # ----- Test evaluation on pure JAX env -----
         if ep % test_interval == 0:
@@ -295,28 +366,27 @@ def fit_pure_cartpole(
             )
             best_test_reward = max(best_test_reward, avg_test_reward)
             print(
-                f"[Episode {ep}] train_loss = {train_loss:.4f}, "
+                f"[Episode {ep}] train_loss = {float(train_loss):.4f}, "
                 f"training_step = {training_step}, "
                 f"test_avg_reward = {avg_test_reward:.2f}, "
                 f"best_test_reward = {best_test_reward:.2f}"
             )
             wandb.log({
-                "train_loss": train_loss,
+                "train_loss": float(train_loss),
                 "training_step": training_step,
                 "test_avg_reward": avg_test_reward,
                 "best_test_reward": best_test_reward,
             })
-
         else:
             print(
-                f"[Episode {ep}] train_loss = {train_loss:.4f}, "
+                f"[Episode {ep}] train_loss = {float(train_loss):.4f}, "
                 f"training_step = {training_step}, "
-                f"reward_sum = {reward_sum:.2f}"
+                f"reward_sum = {float(reward_sum):.2f}"
             )
             wandb.log({
-                "train_loss": train_loss,
+                "train_loss": float(train_loss),
                 "training_step": training_step,
-                "reward_sum": reward_sum,
+                "reward_sum": float(reward_sum),
             })
 
         if training_step >= max_training_steps:

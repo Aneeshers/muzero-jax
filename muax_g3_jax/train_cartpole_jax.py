@@ -4,7 +4,7 @@ from train_cartpole_purejax_fit import fit_pure_cartpole
 import wandb
 
 def main():
-    wandb.init(project="muax_jax_cartpole", name="jax_tracer_buffer_jit_try", mode="online")
+    wandb.init(project="muax_jax_cartpole", name="jax_tracer_buffer_jit_try", mode="disabled")
     support_size = 10
     embedding_size = 8
     discount = 0.99

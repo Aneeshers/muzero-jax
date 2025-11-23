@@ -23,8 +23,8 @@ class JaxTransitionReplayBufferState:
       head: index of next write position
       size: number of valid transitions (<= capacity)
 
-      capacity: ring buffer capacity (max number of transitions)
-      k_steps:  segment length for sampling
+      capacity: ring buffer capacity (max number of transitions) [static]
+      k_steps:  segment length for sampling [static]
     """
     obs: jnp.ndarray
     a: jnp.ndarray
@@ -36,8 +36,9 @@ class JaxTransitionReplayBufferState:
     head: jnp.ndarray       # ()
     size: jnp.ndarray       # ()
 
-    capacity: int
-    k_steps: int
+    # Static fields (non-pytree)
+    capacity: int = struct.field(pytree_node=False)
+    k_steps: int = struct.field(pytree_node=False)
 
 
 def jax_trans_replay_init(
@@ -147,47 +148,58 @@ def _sample_segments_core(
 
     Assumes:
       state.size >= state.k_steps
-
-    This function:
-      - builds a logical view of transitions in time order,
-      - samples starting positions of valid segments,
-      - constructs segments of length L = k_steps.
     """
-    size = state.size            # scalar int32 (JAX)
-    cap = state.capacity
-    L = state.k_steps
+    size = state.size            # scalar int32 (dynamic)
+    cap = state.capacity         # Python int (static)
+    L = state.k_steps            # Python int (static)
 
     # Logical index of oldest transition (head is next write).
-    start = (state.head - size) % cap
+    start = (state.head - size) % cap  # scalar int32
 
-    # Physical indices for logical positions [0..size-1]
-    idxs = (start + jnp.arange(size, dtype=jnp.int32)) % cap   # [size]
+    # Physical indices for *all* positions 0..cap-1 (static length)
+    all_pos = jnp.arange(cap, dtype=jnp.int32)       # [cap]
+    idxs = (start + all_pos) % cap                   # [cap]
 
-    # Logical views
-    obs_log = state.obs[idxs]   # [size, obs_dim]
-    a_log = state.a[idxs]       # [size]
-    r_log = state.r[idxs]       # [size]
-    Rn_log = state.Rn[idxs]     # [size]
-    pi_log = state.pi[idxs]     # [size, num_actions]
-    w_log = state.w[idxs]       # [size]
+    # Logical views of arrays, shape [cap, ...]
+    obs_log = state.obs[idxs]   # [cap, obs_dim]
+    a_log = state.a[idxs]       # [cap]
+    r_log = state.r[idxs]       # [cap]
+    Rn_log = state.Rn[idxs]     # [cap]
+    pi_log = state.pi[idxs]     # [cap, num_actions]
+    w_log = state.w[idxs]       # [cap]
 
-    # Number of valid starting positions for segments of length L
-    # valid_starts = size - L + 1
-    valid_starts = size - L + 1  # scalar int32
+    # Candidate starting positions for segments: s in [0, num_all_starts-1]
+    num_all_starts = cap - L + 1                         # static int
+    s_all = jnp.arange(num_all_starts, dtype=jnp.int32)  # [num_all_starts]
 
-    # Use weights from these start positions
-    w_starts = w_log[:valid_starts]  # [valid_starts]
+    # A start s is valid iff s + L - 1 < size  <=>  s <= size - L
+    size_minus_L = size - L                              # scalar int32
+    valid_mask = (s_all <= size_minus_L).astype(jnp.float32)  # [num_all_starts]
 
-    # Avoid zero-sum weights: fall back to uniform if needed
-    # If all weights <= 0, replace them with ones before soft normalisation.
-    w_starts = jnp.where(w_starts <= 0.0, jnp.ones_like(w_starts), w_starts)
-    probs = w_starts / jnp.sum(w_starts)
+    # Raw weights at starts, but only valid positions should contribute
+    w_raw = w_log[s_all]                                 # [num_all_starts]
+    w_masked = w_raw * valid_mask                        # [num_all_starts]
+
+    # Sum of masked weights
+    sum_w = jnp.sum(w_masked)
+
+    # If sum_w == 0 (degenerate), use uniform over valid starts only.
+    def use_uniform(_):
+        return jnp.where(valid_mask > 0.0, 1.0, 0.0)
+
+    def use_masked(_):
+        return w_masked
+
+    w_final = jax.lax.cond(sum_w <= 0.0, use_uniform, use_masked, operand=None)
+
+    # Normalized probabilities over all candidate starts
+    probs = w_final / jnp.sum(w_final)
 
     # Sample starting indices
     key, subkey = jax.random.split(key)
     start_idx = jax.random.choice(
         subkey,
-        valid_starts,
+        num_all_starts,            # static
         shape=(batch_size,),
         p=probs,
     )  # [B]
@@ -220,19 +232,10 @@ def jax_trans_replay_sample_segments(
     key: jax.Array,
     batch_size: int,
 ):
-    """Python-friendly wrapper around the JAX core sampler.
-
-    This is what you call from your Python training loop. It does a
-    simple error check using int(state.size) and then delegates to the
-    jit/scan-safe `_sample_segments_core`.
-
-    Inside a jitted train_step, you should call `_sample_segments_core`
-    directly (and ensure state.size >= state.k_steps via warmup logic).
-    """
+    """Python-friendly wrapper around the JAX core sampler."""
     size_int = int(state.size)
     if size_int < state.k_steps:
         raise RuntimeError(
             f"Not enough transitions ({size_int}) to sample segments of length {state.k_steps}"
         )
-
     return _sample_segments_core(state, key, batch_size)

@@ -440,10 +440,20 @@ class MuZero:
     return r, ns
 
   def _init_policy(self, policy):
+    # For MuZero, use mctx.muzero_policy
     policy_func = mctx.muzero_policy
-    return jax.jit(policy_func, 
-                    static_argnames=('temperature', 'recurrent_fn', 'num_simulations', 'loop_fn', 'qtransform', 'max_depth', 'dirichlet_fraction', 'dirichlet_alpha', 'pb_c_init', 'pb_c_base'),
-                    backend='gpu')
+    return jax.jit(
+        policy_func,
+        static_argnames=(
+            "recurrent_fn",
+            "num_simulations",
+            "loop_fn",
+            "qtransform",
+            "max_depth",
+        ),
+        backend="gpu",
+    )
+
     # elif policy == 'gumbel':
     #   policy_func = mctx.gumbel_muzero_policy
     #   return jax.jit(policy_func, static_argnames=('recurrent_fn', 'num_simulations', 'max_num_considered_actions', 'gumbel_scale', 'loop_fn', 'qtransform', 'max_depth'), 

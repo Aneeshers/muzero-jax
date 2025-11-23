@@ -35,42 +35,98 @@ def eval_pure_cartpole(
     num_simulations: int = 50,
     num_test_episodes: int = 10,
 ):
-    """Evaluate the model on the pure JAX CartPole env (Python loop)."""
-    total_rewards = jnp.zeros((num_test_episodes,), dtype=jnp.float32)
+    """Evaluate the model on the pure JAX CartPole env.
 
-    for ep in tqdm(range(num_test_episodes), desc="Testing"):
-        # Reset env
-        key, reset_key = jax.random.split(key)
-        obs, env_state = cartpole.reset(reset_key, cartpole.default_params)
+    Uses:
+      - scan over time (steps per episode)
+      - vmap over episodes
+      - jit over the whole batch eval
+    """
+    env_params = cartpole.default_params
+    max_steps = env_params.max_steps_in_episode
 
-        ep_reward = 0.0
-        for t in range(cartpole.default_params.max_steps_in_episode):
-            key, act_key, env_key = jax.random.split(key, 3)
+    def episode_rollout(params, key_ep):
+        """Roll out a single episode and return total reward."""
+        # Reset env for this episode
+        obs0, env_state0 = cartpole.reset(key_ep, env_params)
 
-            # Deterministic policy at test time: temperature = 0.0
-            a, pi, v = model.act_from_params(
-                params,
-                act_key,
-                obs,
-                num_simulations=num_simulations,
-                temperature=0.0,
+        # carry = (env_state, key_step, total_reward, done_flag)
+        carry0 = (
+            env_state0,
+            key_ep,
+            jnp.array(0.0, dtype=jnp.float32),
+            jnp.array(False),
+        )
+
+        def step_fn(carry, _):
+            env_state, key_step, total_reward, done = carry
+            key_step, act_key, env_key = jax.random.split(key_step, 3)
+
+            # If already done, just carry state forward
+            def do_step(args):
+                env_state, key_step, total_reward, done = args
+
+                obs = cartpole.get_obs(env_state)
+
+                a, pi, v = model.act_from_params(
+                    params,
+                    act_key,
+                    obs,
+                    num_simulations=num_simulations,
+                    temperature=0.0,  # deterministic at eval
+                )
+
+                obs_next, env_state_next, reward, done_step, info = cartpole.step(
+                    env_key,
+                    env_state,
+                    a,
+                    env_params,
+                )
+
+                reward = jnp.asarray(reward, dtype=jnp.float32)
+
+                # Only accumulate reward if we weren't done yet
+                total_reward2 = total_reward + jnp.where(done, 0.0, reward)
+                done2 = jnp.logical_or(done, done_step)
+
+                return (env_state_next, key_step, total_reward2, done2), None
+
+            def skip_step(args):
+                # Episode already done: keep everything as-is
+                return args, None
+
+            carry_out, _ = jax.lax.cond(
+                done,
+                skip_step,
+                do_step,
+                (env_state, key_step, total_reward, done),
             )
+            return carry_out, None
 
-            obs, env_state, reward, done, info = cartpole.step(
-                env_key,
-                env_state,
-                a,
-                cartpole.default_params,
-            )
+        carryT, _ = jax.lax.scan(
+            step_fn,
+            carry0,
+            xs=None,
+            length=max_steps,
+        )
+        _, key_final, total_reward_final, _ = carryT
+        return total_reward_final
 
-            ep_reward += float(reward)
-            if bool(done):
-                break
+    # Batch over episodes: params is shared, keys are per-episode
+    batched_rollout = jax.jit(
+        jax.vmap(episode_rollout, in_axes=(None, 0))
+    )
 
-        total_rewards = total_rewards.at[ep].set(ep_reward)
+    # Make per-episode keys
+    key, subkey = jax.random.split(key)
+    keys = jax.random.split(subkey, num_test_episodes)  # [num_test_episodes]
+
+    # Run all episodes in parallel
+    total_rewards = batched_rollout(params, keys)  # [num_test_episodes]
 
     avg_reward = float(jnp.mean(total_rewards))
     return avg_reward, key
+
 
 
 def fit_pure_cartpole(
@@ -85,7 +141,7 @@ def fit_pure_cartpole(
     sample_per_trajectory: int = 10,  # unused now but kept for interface
     num_update_per_episode: int = 50,
     random_seed: int = 0,
-    test_interval: int = 10,
+    test_interval: int = 100,
     num_test_episodes: int = 10,
 ):
     # ---------------- Env ----------------

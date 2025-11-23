@@ -1,6 +1,3 @@
-import dataclasses
-from typing import Tuple, Optional
-
 import jax
 import jax.numpy as jnp
 from flax import struct
@@ -10,27 +7,33 @@ from episode_tracer import Transition
 
 @struct.dataclass
 class JaxPNStepState:
-    """JAX version of PNStep internal state.
+    """JAX version of PNStep internal state using a ring buffer.
 
-    This mirrors the Python PNStep semantics using a ring buffer of capacity
-    `capacity` and bootstrapping horizon `n`.
+    We maintain:
+      - obs, a, r, v, pi, done for the last `capacity` steps
+      - start: logical index of the oldest element
+      - size:  number of valid elements
+      - done_flag: whether the *last appended* step had done=True
+
+    n:        bootstrapping horizon
+    capacity: ring buffer capacity (>= max episode length)
+    gammas:   [n] powers of gamma
+    gamman:   gamma^n
+    alpha:    PER alpha
     """
-    # Ring buffers for steps
     obs: jnp.ndarray        # [capacity, obs_dim]
-    a: jnp.ndarray          # [capacity] (int32)
-    r: jnp.ndarray          # [capacity] (float32)
-    v: jnp.ndarray          # [capacity] (float32)
+    a: jnp.ndarray          # [capacity]
+    r: jnp.ndarray          # [capacity]
+    v: jnp.ndarray          # [capacity]
     pi: jnp.ndarray         # [capacity, num_actions]
     done: jnp.ndarray       # [capacity] (bool)
 
-    # Book-keeping
-    size: jnp.ndarray       # () how many valid entries (<= capacity)
-    start: jnp.ndarray      # () index of oldest entry (like deque left)
-    done_flag: jnp.ndarray  # () bool: last appended `done`
+    size: jnp.ndarray       # ()
+    start: jnp.ndarray      # ()
+    done_flag: jnp.ndarray  # ()
 
-    # Hyperparameters / precomputed constants
-    n: int                  # bootstrapping horizon
-    capacity: int           # ring buffer capacity (>= max episode length)
+    n: int                  # bootstrapping horizon (static)
+    capacity: int           # ring buffer capacity (static)
     gammas: jnp.ndarray     # [n]
     gamman: jnp.ndarray     # ()
     alpha: jnp.ndarray      # ()
@@ -44,19 +47,7 @@ def jax_pnstep_init(
     num_actions: int,
     capacity: int,
 ) -> JaxPNStepState:
-    """Initialize a JAX PNStep state.
-
-    Args:
-        n: bootstrapping horizon (same as PNStep.n).
-        gamma: discount.
-        alpha: PER alpha.
-        obs_dim: dimension of observation (e.g. 4 for CartPole).
-        num_actions: number of actions.
-        capacity: max number of steps we store (>= max episode length).
-
-    Returns:
-        JaxPNStepState with zeroed buffers.
-    """
+    """Initialize a JAX PNStep state."""
     gammas = jnp.power(gamma, jnp.arange(n, dtype=jnp.float32))
     gamman = jnp.power(gamma, n)
 
@@ -78,160 +69,170 @@ def jax_pnstep_init(
     )
 
 
-def _logical_to_physical_index(state: JaxPNStepState, k: int) -> int:
-    """Convert logical index k (0..size-1) to physical ring-buffer index."""
-    return int((int(state.start) + k) % state.capacity)
+def _pnstep_push_core(
+    state: JaxPNStepState,
+    obs,
+    a,
+    r,
+    done,
+    v,
+    pi,
+) -> JaxPNStepState:
+    """Pure JAX core: push a single step into the ring buffer."""
+    # Convert inputs to JAX arrays of the right dtype/shape.
+    obs = jnp.asarray(obs, dtype=jnp.float32)
+    a = jnp.asarray(a, dtype=jnp.int32)
+    r = jnp.asarray(r, dtype=jnp.float32)
+    v = jnp.asarray(v, dtype=jnp.float32)
+    pi = jnp.asarray(pi, dtype=jnp.float32)
+    done_arr = jnp.asarray(done, dtype=bool)
+
+    # Logical index where we append: size (0..capacity-1).
+    idx = (state.start + state.size) % state.capacity  # scalar int32 (traced)
+
+    new_obs = state.obs.at[idx].set(obs)
+    new_a = state.a.at[idx].set(a)
+    new_r = state.r.at[idx].set(r)
+    new_v = state.v.at[idx].set(v)
+    new_pi = state.pi.at[idx].set(pi)
+    new_done = state.done.at[idx].set(done_arr)
+
+    # Update size (clamp to capacity) and done_flag
+    new_size = jnp.minimum(state.size + 1, state.capacity)
+
+    return state.replace(
+        obs=new_obs,
+        a=new_a,
+        r=new_r,
+        v=new_v,
+        pi=new_pi,
+        done=new_done,
+        size=new_size,
+        done_flag=done_arr,
+    )
+
+
+def _pnstep_can_pop_jax(state: JaxPNStepState) -> jnp.ndarray:
+    """Pure JAX predicate: whether there is a transition to pop.
+
+    Mirrors Python PNStep.__bool__:
+        bool(len(self)) and (self._done or len(self) > self.n)
+    """
+    size = state.size
+    cond_len = size > 0
+    cond_done_or_long = jnp.logical_or(state.done_flag, size > state.n)
+    return jnp.logical_and(cond_len, cond_done_or_long)
+
+
+def jax_pnstep_can_pop(state: JaxPNStepState) -> bool:
+    """Python-friendly wrapper for can_pop, used in Python while loops."""
+    return bool(_pnstep_can_pop_jax(state))
+
+
+def _pnstep_pop_core(state: JaxPNStepState) -> tuple[JaxPNStepState, Transition]:
+    """Pure JAX core: pop a single transition from the buffer.
+
+    This mirrors PNStep.pop as closely as possible but uses vectorized
+    JAX ops (no Python loops).
+    """
+    size = state.size
+    start = state.start
+    cap = state.capacity
+    n = state.n
+
+    # Values at the current `start` (earliest) index.
+    obs0 = state.obs[start]
+    a0 = state.a[start]
+    r0 = state.r[start]
+    v0 = state.v[start]
+    pi0 = state.pi[start]
+
+    # Rewards r_t, r_{t+1}, ..., r_{t+n-1} (wrapped).
+    j = jnp.arange(n, dtype=jnp.int32)                        # [n]
+    idxs = (start + j) % cap                                  # [n]
+    rs_all = state.r[idxs]                                    # [n]
+
+    # Only first `len_rs = min(size, n)` rewards are valid
+    len_rs = jnp.minimum(size, n)
+    valid_mask = (j < len_rs).astype(jnp.float32)             # [n]
+    rs_masked = rs_all * valid_mask                           # [n]
+
+    # Discounted partial return Rn = sum(gamma^k * r_{t+k})
+    Rn = jnp.sum(state.gammas * rs_masked)
+
+    # Immediate reward r_t
+    # (Python version does r = _deque_r.popleft(); this is that r_t)
+    # r0 already defined above.
+
+    # Length after popping the earliest state-action pair
+    size_after = size - 1
+
+    # Bootstrapping v_next, gamman:
+    # if size_after >= n -> v_next at index start + n, gamman = gamma^n
+    # else -> no bootstrap, v_next = 0, gamman = gamma^(len_rs - 1)
+    idx_vnext = (start + n) % cap
+
+    cond_bootstrap = size_after >= n
+    v_next = jnp.where(cond_bootstrap, state.v[idx_vnext], 0.0)
+
+    # Safely compute index len_rs-1 (>=0)
+    len_rs_idx = jnp.maximum(len_rs - 1, 0)
+    gamman_alt = state.gammas[len_rs_idx]
+
+    gamman = jnp.where(cond_bootstrap, state.gamman, gamman_alt)
+
+    Rn = Rn + v_next * gamman
+
+    # Priority weight w = |v - Rn| ** alpha
+    priority = jnp.abs(v0 - Rn) ** state.alpha
+
+    # Update start/size like popleft
+    new_start = (start + 1) % cap
+    new_size = size - 1
+
+    new_state = state.replace(
+        start=new_start,
+        size=new_size,
+    )
+
+    # done field for the popped transition:
+    # Python PNStep sets done=True when there is no more bootstrapping.
+    done_out = size_after < n
+
+    trans = Transition(
+        obs=obs0,     # [obs_dim]
+        a=a0,         # scalar int32
+        r=r0,         # scalar float32
+        done=done_out,
+        Rn=Rn,        # scalar float32
+        v=v0,         # scalar float32
+        pi=pi0,       # [num_actions]
+        w=priority,   # scalar float32
+    )
+    return new_state, trans
 
 
 def jax_pnstep_push(
     state: JaxPNStepState,
-    obs: jnp.ndarray,
-    a: int,
-    r: float,
-    done: bool,
-    v: jnp.ndarray,
-    pi: jnp.ndarray,
+    obs,
+    a,
+    r,
+    done,
+    v,
+    pi,
 ) -> JaxPNStepState:
-    """Push a single step (obs, a, r, done, v, pi) into the ring buffer.
+    """Python-visible push wrapper.
 
-    This corresponds to PNStep.add(...), but does NOT pop anything.
+    This function is JIT/scan-safe and can also be used inside Python loops.
     """
-    # Where to write: end of current deque
-    size = int(state.size)
-    assert size < state.capacity, "JaxPNStepState capacity exceeded"
-    idx = _logical_to_physical_index(state, size)  # index of new element
-
-    obs = jnp.asarray(obs, dtype=jnp.float32)
-    v = jnp.asarray(v, dtype=jnp.float32)
-    pi = jnp.asarray(pi, dtype=jnp.float32)
-    a = jnp.asarray(a, dtype=jnp.int32)
-    r = jnp.asarray(r, dtype=jnp.float32)
-    done = jnp.asarray(done, dtype=bool)
-
-    state = state.replace(
-        obs=state.obs.at[idx].set(obs),
-        a=state.a.at[idx].set(a),
-        r=state.r.at[idx].set(r),
-        v=state.v.at[idx].set(v),
-        pi=state.pi.at[idx].set(pi),
-        done=state.done.at[idx].set(done),
-        size=state.size + 1,
-        done_flag=done,
-    )
-    return state
+    return _pnstep_push_core(state, obs, a, r, done, v, pi)
 
 
-def jax_pnstep_can_pop(state: JaxPNStepState) -> bool:
-    """Equivalent of Python PNStep.__bool__ for the JAX state.
-
-    True iff there is at least one transition to pop:
-
-        bool(len(self)) and (self._done or len(self) > self.n)
-    """
-    size = int(state.size)
-    if size == 0:
-        return False
-
-    # len(self) > n OR last add had done=True
-    return bool((size > state.n) or bool(state.done_flag))
-
-
-def jax_pnstep_pop(state: JaxPNStepState) -> Tuple[JaxPNStepState, Transition]:
-    """Pop a single transition from the JAX tracer state.
-
-    Mirrors PNStep.pop semantics as closely as possible.
-    """
-    size = int(state.size)
-    if size == 0:
-        raise RuntimeError("jax_pnstep_pop called on empty state")
-
-    start = int(state.start)
-    n = state.n
-    cap = state.capacity
-
-    # Pop earliest obs, a, v, pi (like _deque_s.popleft())
-    idx0 = start
-    obs0 = state.obs[idx0]
-    a0 = state.a[idx0]
-    v0 = state.v[idx0]
-    pi0 = state.pi[idx0]
-
-    # rs = _deque_r[:n]
-    len_rs = min(n, size)  # number of rewards to use for Rn
-    rs = []
-    for j in range(len_rs):
-        idx = (start + j) % cap
-        rs.append(state.r[idx])
-    rs = jnp.asarray(rs, dtype=jnp.float32)  # [len_rs]
-
-    # Rn = sum(gammas[:len_rs] * rs)
-    gammas = state.gammas[:len_rs]
-    Rn = jnp.sum(gammas * rs)
-
-    # r = _deque_r.popleft() -> reward at current start
-    r0 = state.r[idx0]
-
-    # len(self) after popping s (but before removing rewards)
-    size_after_pop_s = size - 1
-
-    # Bootstrapping v_next
-    if size_after_pop_s >= n:
-        # v_next = v at old s_n (like _deque_s[self.n - 1] after popleft)
-        idx_vnext = (start + n) % cap
-        v_next = state.v[idx_vnext]
-        gamman = state.gamman
-    else:
-        v_next = jnp.array(0.0, dtype=jnp.float32)
-        # Equivalent to _gammas[len(rs) - 1] in Python when len_rs>0
-        gamman = state.gammas[len_rs - 1] if len_rs > 0 else jnp.array(0.0)
-
-    Rn = Rn + v_next * gamman
-
-    # Priority weight: w = |v - Rn| ** alpha
-    priority = jnp.abs(v0 - Rn) ** state.alpha
-    w = float(priority)
-
-    # Update start/size (like popleft on both deques)
-    new_start = (start + 1) % cap
-    new_size = size - 1
-    state = state.replace(
-        start=jnp.array(new_start, dtype=jnp.int32),
-        size=jnp.array(new_size, dtype=jnp.int32),
-    )
-
-    trans = Transition(
-        obs=obs0,
-        a=int(a0),
-        r=float(r0),
-        done=bool(size_after_pop_s < n),  # approximate "done" like Python PNStep
-        Rn=float(Rn),
-        v=float(v0),
-        pi=pi0,
-        w=w,
-    )
-    return state, trans
-
-
-def jax_pnstep_add_step(
+def jax_pnstep_pop(
     state: JaxPNStepState,
-    obs: jnp.ndarray,
-    a: int,
-    r: float,
-    done: bool,
-    v: jnp.ndarray,
-    pi: jnp.ndarray,
-) -> Tuple[JaxPNStepState, Optional[Transition], bool]:
-    """Push a step and pop at most one transition if available.
+) -> tuple[JaxPNStepState, Transition]:
+    """Python-visible pop wrapper.
 
-    This is convenient for "per-step" logic:
-
-        state, maybe_trans, has_trans = jax_pnstep_add_step(...)
-
-    If has_trans is True, maybe_trans is a Transition; otherwise None.
+    Under JIT, you would call `_pnstep_pop_core` directly.
     """
-    state = jax_pnstep_push(state, obs, a, r, done, v, pi)
-    if jax_pnstep_can_pop(state):
-        state, trans = jax_pnstep_pop(state)
-        return state, trans, True
-    else:
-        return state, None, False
+    return _pnstep_pop_core(state)

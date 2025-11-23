@@ -1,13 +1,11 @@
-# train_cartpole_purejax_fit.py
-
 import os
 import jax
 from jax import numpy as jnp
 from tqdm import tqdm
-from cartpole_jax_env import CartPole
-from replay_buffer import TrajectoryReplayBuffer, Trajectory
-from model import MuZero, optimizer as make_optimizer
 import wandb
+
+from cartpole_jax_env import CartPole
+from model import MuZero, optimizer as make_optimizer
 from nn import (
     _init_representation_func,
     _init_prediction_func,
@@ -22,8 +20,11 @@ from jax_tracer import (
     jax_pnstep_can_pop,
     jax_pnstep_pop,
 )
-# from test import test  # Not needed for pure JAX eval; we use CartPole directly.
-
+from jax_transition_replay_buffer import (
+    jax_trans_replay_init,
+    jax_trans_replay_add_transition,
+    jax_trans_replay_sample_segments,
+)
 
 def eval_pure_cartpole(
     model: MuZero,
@@ -82,9 +83,9 @@ def fit_pure_cartpole(
     max_training_steps: int = 100_000,
     num_simulations: int = 50,
     k_steps: int = 10,
-    buffer_capacity: int = 500,
-    buffer_warm_up: int = 128,
-    num_trajectory: int = 32,
+    buffer_capacity: int = 500,     # capacity = number of transitions
+    buffer_warm_up: int = 1024,     # minimum transitions before updates
+    num_trajectory: int = 32,       # used to set batch_size
     sample_per_trajectory: int = 10,
     num_update_per_episode: int = 50,
     random_seed: int = 0,
@@ -98,7 +99,6 @@ def fit_pure_cartpole(
     obs_dim = cartpole.obs_shape  # (4,)
     max_steps = cartpole.default_params.max_steps_in_episode
 
-
     # ---------------- Params / opt_state ----------------
     key = jax.random.PRNGKey(random_seed)
     key, init_key, test_key = jax.random.split(key, 3)
@@ -108,10 +108,20 @@ def fit_pure_cartpole(
     params = model.params
     opt_state = model.optimizer_state
 
-    # ---------------- Tracer & Buffer ----------------
-    buffer = TrajectoryReplayBuffer(buffer_capacity)
+    # ---------------- JAX Transition Replay Buffer ----------------
+    # Buffer stores per-step transitions; segments of length k_steps are
+    # built at sample time.
+    jax_rb = jax_trans_replay_init(
+        capacity=buffer_capacity,
+        obs_dim=obs_dim[0],
+        num_actions=num_actions,
+        k_steps=k_steps,
+    )
 
     training_step = 0
+
+    # Batch size for updates: roughly num_trajectory * sample_per_trajectory
+    batch_size = num_trajectory * sample_per_trajectory
 
     def temperature_fn(max_training_steps, training_steps):
         if training_steps < 0.5 * max_training_steps:
@@ -122,11 +132,17 @@ def fit_pure_cartpole(
             return 0.25
 
     # ---------------- Buffer warmup ----------------
+        # ---------------- Buffer warmup ----------------
     print("Buffer warm-up stage (pure CartPole)...")
-    while len(buffer) < buffer_warm_up:
+    warmup_ep = 0
+    # We warm up until we have at least `buffer_warm_up` transitions.
+    while int(jax_rb.size) < buffer_warm_up:
+        warmup_ep += 1
+        before_size = int(jax_rb.size)
+
         key, reset_key = jax.random.split(key)
         obs, env_state = cartpole.reset(reset_key, cartpole.default_params)
-        
+
         jax_tracer = jax_pnstep_init(
             n=k_steps,
             gamma=discount,
@@ -135,11 +151,12 @@ def fit_pure_cartpole(
             num_actions=num_actions,
             capacity=max_steps,
         )
-        
-        trajectory = Trajectory()
+
         temperature = temperature_fn(max_training_steps, training_step)
 
-        for t in range(cartpole.default_params.max_steps_in_episode):
+        ep_steps = 0
+        for t in range(max_steps):
+            ep_steps += 1
             key, act_key, env_key = jax.random.split(key, 3)
 
             # act_from_params: pure-style
@@ -158,6 +175,7 @@ def fit_pure_cartpole(
                 cartpole.default_params,
             )
 
+            # Push into JAX tracer and pop transitions into transition buffer
             jax_tracer = jax_pnstep_push(
                 jax_tracer,
                 obs,
@@ -169,25 +187,36 @@ def fit_pure_cartpole(
             )
             while jax_pnstep_can_pop(jax_tracer):
                 jax_tracer, trans = jax_pnstep_pop(jax_tracer)
-                trajectory.add(trans)
+                jax_rb = jax_trans_replay_add_transition(jax_rb, trans)
 
             obs = obs_next
             if bool(done):
                 break
 
-        trajectory.finalize()
-        if len(trajectory) >= k_steps:
-            mean_w = float(trajectory.batched_transitions.w.mean())
-            buffer.add(trajectory, mean_w)
+        after_size = int(jax_rb.size)
+        added = after_size - before_size
+        print(
+            f"[Warmup ep {warmup_ep}] steps={ep_steps}, "
+            f"transitions added this ep={added}, total transitions={after_size} "
+            f"(target warmup={buffer_warm_up})"
+        )
+
+        # Safety: prevent infinite loop if buffer_warm_up > capacity
+        if buffer_warm_up > buffer_capacity:
+            print(
+                f"Warning: buffer_warm_up ({buffer_warm_up}) > buffer_capacity ({buffer_capacity}); "
+                "warmup will never terminate."
+            )
+            break
+
 
     print("Start training (pure CartPole)...")
-    
     best_test_reward = float("-inf")
 
     for ep in tqdm(range(max_episodes), desc="Training"):
         key, reset_key = jax.random.split(key)
         obs, env_state = cartpole.reset(reset_key, cartpole.default_params)
-        
+
         jax_tracer = jax_pnstep_init(
             n=k_steps,
             gamma=discount,
@@ -196,13 +225,12 @@ def fit_pure_cartpole(
             num_actions=num_actions,
             capacity=max_steps,
         )
-        
-        trajectory = Trajectory()
+
         temperature = temperature_fn(max_training_steps, training_step)
 
         # ----- Rollout one episode -----
         reward_sum = 0.0
-        for t in tqdm(range(cartpole.default_params.max_steps_in_episode), desc="Rollout"):
+        for t in tqdm(range(max_steps), desc="Rollout"):
             key, act_key, env_key = jax.random.split(key, 3)
             a, pi, v = model.act_from_params(
                 params,
@@ -218,6 +246,7 @@ def fit_pure_cartpole(
                 cartpole.default_params,
             )
             reward_sum += float(reward)
+
             jax_tracer = jax_pnstep_push(
                 jax_tracer,
                 obs,
@@ -229,24 +258,20 @@ def fit_pure_cartpole(
             )
             while jax_pnstep_can_pop(jax_tracer):
                 jax_tracer, trans = jax_pnstep_pop(jax_tracer)
-                trajectory.add(trans)
+                jax_rb = jax_trans_replay_add_transition(jax_rb, trans)
 
             obs = obs_next
             if bool(done):
                 break
 
-        trajectory.finalize()
-        if len(trajectory) >= k_steps:
-            mean_w = float(trajectory.batched_transitions.w.mean())
-            buffer.add(trajectory, mean_w)
-
         # ----- Updates -----
         train_loss = 0.0
         for _ in range(num_update_per_episode):
-            batch = buffer.sample(
-                num_trajectory=num_trajectory,
-                sample_per_trajectory=sample_per_trajectory,
-                k_steps=k_steps,
+            # Sample a batch of segments from transition-level JAX replay buffer
+            batch, key = jax_trans_replay_sample_segments(
+                jax_rb,
+                key,
+                batch_size=batch_size,
             )
             params, opt_state, loss = model.update_from_params(
                 params,
@@ -281,7 +306,7 @@ def fit_pure_cartpole(
                 "test_avg_reward": avg_test_reward,
                 "best_test_reward": best_test_reward,
             })
-            
+
         else:
             print(
                 f"[Episode {ep}] train_loss = {train_loss:.4f}, "
@@ -293,6 +318,7 @@ def fit_pure_cartpole(
                 "training_step": training_step,
                 "reward_sum": reward_sum,
             })
+
         if training_step >= max_training_steps:
             break
 

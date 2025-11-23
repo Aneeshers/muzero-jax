@@ -1,0 +1,5 @@
+muax_simple/__pycache__/
+muax_simple/content/
+muax_g3_jax/content/
+muax_g3_jax/wandb/
+muax_g3_jax/__pycache__/

@@ -3,6 +3,7 @@ import jax
 from jax import numpy as jnp
 from tqdm import tqdm
 import wandb
+import time
 
 from cartpole_jax_env import CartPole
 from model import MuZero, optimizer as make_optimizer
@@ -33,7 +34,7 @@ def eval_pure_cartpole(
     cartpole: CartPole,
     key,
     num_simulations: int = 50,
-    num_test_episodes: int = 10,
+    num_test_episodes: int = 100,
 ):
     """Evaluate the model on the pure JAX CartPole env.
 
@@ -120,18 +121,19 @@ def eval_pure_cartpole(
     # Make per-episode keys
     key, subkey = jax.random.split(key)
     keys = jax.random.split(subkey, num_test_episodes)  # [num_test_episodes]
-
+    start_time = time.time()
     # Run all episodes in parallel
     total_rewards = batched_rollout(params, keys)  # [num_test_episodes]
-
+    end_time = time.time()
+    inference_time = end_time - start_time
     avg_reward = float(jnp.mean(total_rewards))
-    return avg_reward, key
+    return avg_reward, key, inference_time
 
 
 
 def fit_pure_cartpole(
     model: MuZero,
-    max_episodes: int = 1000,
+    max_episodes: int = 2000,
     max_training_steps: int = 100_000,
     num_simulations: int = 50,
     k_steps: int = 10,
@@ -142,7 +144,7 @@ def fit_pure_cartpole(
     num_update_per_episode: int = 50,
     random_seed: int = 0,
     test_interval: int = 100,
-    num_test_episodes: int = 10,
+    num_test_episodes: int = 100,
 ):
     # ---------------- Env ----------------
     cartpole = CartPole()
@@ -399,7 +401,7 @@ def fit_pure_cartpole(
 
     for ep in tqdm(range(max_episodes), desc="Training"):
         temperature = temperature_fn(max_training_steps, training_step)
-
+ 
         # Jitted per-episode rollout + updates
         params, opt_state, jax_rb, key, reward_sum, train_loss = train_one_episode_jit(
             params,
@@ -412,7 +414,7 @@ def fit_pure_cartpole(
 
         # ----- Test evaluation on pure JAX env -----
         if ep % test_interval == 0:
-            avg_test_reward, test_key = eval_pure_cartpole(
+            avg_test_reward, test_key, inference_time = eval_pure_cartpole(
                 model,
                 params,
                 cartpole,
@@ -426,12 +428,14 @@ def fit_pure_cartpole(
                 f"training_step = {training_step}, "
                 f"test_avg_reward = {avg_test_reward:.2f}, "
                 f"best_test_reward = {best_test_reward:.2f}"
+                f"inference_time = {inference_time:.2f}s"
             )
             wandb.log({
                 "train_loss": float(train_loss),
                 "training_step": training_step,
                 "test_avg_reward": avg_test_reward,
                 "best_test_reward": best_test_reward,
+                "inference_time": inference_time,
             })
         else:
             print(

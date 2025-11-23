@@ -17,4 +17,4 @@ module load python/3.10.9-fasrc01
 # conda activate torch || true
 cd /n/home04/amuppidi/muax_control/muax_g3_jax
 # Use explicit Python path from your torch env (as in your example)
-~/.conda/envs/torch/bin/python train_cartpole_jax.py
+~/.conda/envs/torch/bin/python train_cartpole_jax.py --support_size 10 --embedding_size 8 --discount 0.99 --num_actions 2 --num_simulations 250 --k_steps 10 --wandb_project muax_jax_cartpole_sims --wandb_mode online --max_episodes 2000
